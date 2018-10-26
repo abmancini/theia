@@ -47,8 +47,8 @@ export class ExpressionContainer implements CompositeConsoleItem {
         return !!this.variablesReference;
     }
 
-    protected elements: Promise<ConsoleItem[]> | undefined;
-    async getElements(): Promise<IterableIterator<ConsoleItem>> {
+    protected elements: Promise<ExpressionContainer[]> | undefined;
+    async getElements(): Promise<IterableIterator<ExpressionContainer>> {
         if (!this.hasElements || !this.session) {
             return [].values();
         }
@@ -57,8 +57,8 @@ export class ExpressionContainer implements CompositeConsoleItem {
         }
         return (await this.elements).values();
     }
-    protected async doResolve(): Promise<ConsoleItem[]> {
-        const result: ConsoleItem[] = [];
+    protected async doResolve(): Promise<ExpressionContainer[]> {
+        const result: ExpressionContainer[] = [];
         if (this.namedVariables) {
             await this.fetch(result, 'named');
         }
@@ -201,8 +201,9 @@ export class DebugVariable extends ExpressionContainer {
         return !!this.valueRef && document.queryCommandSupported('copy');
     }
     copyValue(): void {
-        if (this.valueRef) {
-            document.getSelection().selectAllChildren(this.valueRef);
+        const selection = document.getSelection();
+        if (this.valueRef && selection) {
+            selection.selectAllChildren(this.valueRef);
             document.execCommand('copy');
         }
     }
@@ -213,8 +214,9 @@ export class DebugVariable extends ExpressionContainer {
         return !!this.nameRef && document.queryCommandSupported('copy');
     }
     copyAsExpression(): void {
-        if (this.nameRef) {
-            document.getSelection().selectAllChildren(this.nameRef);
+        const selection = document.getSelection();
+        if (this.nameRef && selection) {
+            selection.selectAllChildren(this.nameRef);
             document.execCommand('copy');
         }
     }
@@ -257,7 +259,10 @@ export class ExpressionItem extends ExpressionContainer {
     static notAvailable = 'not available';
 
     protected value = ExpressionItem.notAvailable;
-    protected available = false;
+    protected _available = false;
+    get available(): boolean {
+        return this._available;
+    }
 
     constructor(
         protected readonly expression: string,
@@ -268,7 +273,7 @@ export class ExpressionItem extends ExpressionContainer {
 
     render(): React.ReactNode {
         const valueClassNames: string[] = [];
-        if (!this.available) {
+        if (!this._available) {
             valueClassNames.push(ConsoleItem.errorClassName);
             valueClassNames.push('theia-debug-console-unavailable');
         }
@@ -278,14 +283,14 @@ export class ExpressionItem extends ExpressionContainer {
         </div>;
     }
 
-    async evaluate(): Promise<void> {
+    async evaluate(context: string = 'repl'): Promise<void> {
         if (this.session) {
             try {
                 const { expression } = this;
-                const body = await this.session.evaluate(expression, 'repl');
+                const body = await this.session.evaluate(expression, context);
                 if (body) {
                     this.value = body.result;
-                    this.available = true;
+                    this._available = true;
                     this.variablesReference = body.variablesReference;
                     this.namedVariables = body.namedVariables;
                     this.indexedVariables = body.indexedVariables;
@@ -293,11 +298,11 @@ export class ExpressionItem extends ExpressionContainer {
                 }
             } catch (err) {
                 this.value = err.message;
-                this.available = false;
+                this._available = false;
             }
         } else {
             this.value = 'Please start a debug session to evaluate';
-            this.available = false;
+            this._available = false;
         }
     }
 
